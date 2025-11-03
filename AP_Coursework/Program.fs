@@ -73,7 +73,6 @@ let lexer (input: string) : Token list =
 let mutable symbolTable = Map.empty<string, float>
 let mutable functionTable = Map.empty<string, string * Token list>
 
-// power using repeated multiplication
 let rec pow baseF expF =
   if expF = 0.0 then 1.0
   elif expF = 1.0 then baseF
@@ -85,17 +84,14 @@ let rec pow baseF expF =
   else
     raise (EvalError "Fractional powers not supported without Math library")
 
-// absolute difference check
 let isClose a b = 
   let diff = if a > b then a - b else b - a
   diff < 1e-10
 
-// integer-like check (no Math.Round)
 let isIntLike f =
   let n = int f
   isClose f (float n)
 
-// integer division (truncates toward zero)
 let intDiv a b =
   if b = 0.0 then raise (EvalError "Division by zero")
   else
@@ -103,12 +99,11 @@ let intDiv a b =
     if q >= 0.0 then float (int q)
     else float (int q + 1)
 
-// modulo operation (consistent with integer division)
 let intMod a b =
   if b = 0.0 then raise (EvalError "Modulo by zero")
   else a - b * intDiv a b
 
-// ------------------ Parser ------------------
+// Parser
 let rec parseE tokens =
   let (tokens2, v1, hasFloat1) = parseT tokens
   parseEopt tokens2 v1 hasFloat1
@@ -167,24 +162,19 @@ and parseP tokens =
   match tokens with
   | Number (n, hadDot) :: tail -> tail, n, (hadDot || not (isIntLike n))
   | Ident name :: Lpar :: tail ->
-      // function call: name(arg)
       let (afterArg, argVal, argFloat) = parseE tail
       match afterArg with
       | Rpar :: rest ->
           match functionTable.TryFind name with
           | Some (param, body) ->
-              // Temporarily bind parameter and evaluate body
               let oldBinding = symbolTable.TryFind param
               symbolTable <- symbolTable.Add(param, argVal)
               let (afterBody, result, resFloat) = parseE body
-              // function body must be a full expression
               if afterBody <> [] then
-                  // restore before raising
                   match oldBinding with
                   | Some v -> symbolTable <- symbolTable.Add(param, v)
                   | None -> symbolTable <- symbolTable.Remove param
                   raise (ParseError $"Extra tokens in function body of {name}")
-              // restore binding
               match oldBinding with
               | Some v -> symbolTable <- symbolTable.Add(param, v)
               | None -> symbolTable <- symbolTable.Remove param
@@ -202,12 +192,11 @@ and parseP tokens =
       | _ -> raise (ParseError "Missing closing parenthesis")
   | _ -> raise (ParseError "Unexpected token")
 
-// ------------------ Evaluation ------------------
+// Evaluation
 let parseAndEval tokens =
   let rec parseStatement toks =
     match toks with
     | Ident fname :: Lpar :: Ident param :: Rpar :: Assign :: rest ->
-        // function definition: f(x) = <expr>
         functionTable <- functionTable.Add(fname, (param, rest))
         [], 0.0, false
     | Ident name :: Assign :: rest ->
@@ -221,19 +210,16 @@ let parseAndEval tokens =
 
 let EvaluateExpression (input: string) =
     try
-        // Ensure tables are initialized
         if obj.ReferenceEquals(symbolTable, null) then
             symbolTable <- Map.empty
         if obj.ReferenceEquals(functionTable, null) then
             functionTable <- Map.empty
 
-        // Split input by newlines or semicolons
         let lines = 
             input.Split([|'\n'; ';'|], StringSplitOptions.RemoveEmptyEntries)
             |> Array.map (fun s -> s.Trim())
             |> Array.filter (fun s -> s <> "")
 
-        // Evaluate each line sequentially, keeping variables and functions
         let mutable lastResult = 0.0
         let mutable isFloat = false
 
@@ -252,7 +238,6 @@ let EvaluateExpression (input: string) =
     | EvalError msg -> $"Runtime error: {msg}"
     | ex -> $"Error: {ex.Message}"
 
-// Helpers for GUI plotting
 let ResetState () =
     symbolTable <- Map.empty
     functionTable <- Map.empty
@@ -263,12 +248,10 @@ let EvaluateExprForX (expr: string) (x: float) =
             symbolTable <- Map.empty
         if obj.ReferenceEquals(functionTable, null) then
             functionTable <- Map.empty
-        // temporarily bind x
         let oldX = symbolTable.TryFind "x"
         symbolTable <- symbolTable.Add("x", x)
         let tokens = lexer expr
         let (value, _) = parseAndEval tokens
-        // restore x
         match oldX with
         | Some v -> symbolTable <- symbolTable.Add("x", v)
         | None -> symbolTable <- symbolTable.Remove "x"
